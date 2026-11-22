@@ -53,8 +53,27 @@ jobs:
           assert "xss-reflected-name" in ids, "XSS refletido não explorado"
           assert "sqli-error-id" in ids, "SQL injection não explorado"
           EOF
+      # modo offline: bases baixadas antes, depois nenhum container acessa a internet
+      - run: vibesec update
+      - run: vibesec scan tests/fixtures/vulnapp --mode full --depth quick --offline -y -q --out e2e-offline
+      - name: Confere o modo offline
+        run: |
+          python - <<'EOF'
+          import glob, json
+          r = json.load(open(glob.glob("e2e-offline/*/report.json")[0]))
+          tools = {t["name"]: t["status"] for t in r["tools"]}
+          print(tools)
+          for name in ("sandbox", "vibesec-probe", "semgrep", "trivy", "nmap", "nuclei", "zap", "tshark"):
+              assert tools.get(name) == "ok", (name, tools)
+          assert "osv-scanner" not in tools  # precisa de internet: desligado no offline
+          ids = {f["rule_id"] for f in r["findings"] if f["confirmed"]}
+          assert {"exposed/console", "xss-reflected-name", "sqli-error-id"} <= ids, sorted(ids)
+          assert any(f["category"] == "dependency" for f in r["findings"]), "base local do Trivy não usada"
+          EOF
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: e2e-report
-          path: e2e
+          path: |
+            e2e
+            e2e-offline
