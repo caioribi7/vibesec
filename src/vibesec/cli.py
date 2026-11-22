@@ -34,13 +34,10 @@ app = typer.Typer(
     add_completion=False,
 )
 
-BANNER = r"""[bold magenta]
- __   __ _  _                ___
- \ \ / /(_)| |__  ___  ___  / __| ___  __
-  \ V / | || '_ \/ -_)|___| \__ \/ -_)/ _|
-   \_/  |_||_.__/\___|      |___/\___|\__|[/][dim]  v{v}[/]
-[dim]  pentest de ponta a ponta para repositórios[/]
-"""
+def _banner() -> None:
+    from vibesec.brand import banner
+
+    console.print(banner(__version__))
 
 
 class Mode(str, Enum):
@@ -113,7 +110,7 @@ def scan(
         raise typer.Exit(2)
 
     if not quiet:
-        console.print(BANNER.format(v=__version__))
+        _banner()
 
     if mode != Mode.static and not no_docker and not yes and sys.stdin.isatty():
         console.print(
@@ -182,7 +179,7 @@ def doctor(no_docker: bool = typer.Option(False, "--no-docker")):
     from vibesec.engine import tool_matrix
     from vibesec.runner import docker_available
 
-    console.print(BANNER.format(v=__version__))
+    _banner()
     t = Table(header_style="bold", box=None, padding=(0, 2))
     for col in ("Ferramenta", "Fase", "Via", "Para que serve / como instalar"):
         t.add_column(col)
@@ -349,7 +346,7 @@ def mb_off():
 
 
 def menu() -> None:
-    console.print(BANNER.format(v=__version__))
+    _banner()
     options = [
         ("Escanear um repositório", "scan"),
         ("Verificar ferramentas instaladas", "doctor"),

@@ -97,3 +97,31 @@ def test_cli_static_scan(vulnapp, tmp_path, monkeypatch):
     data = json.loads(report.read_text(encoding="utf-8"))
     assert data["counts"]["critical"] >= 1 and data["grade"] == "F"
     assert cfg.history()[0]["target"] == "vulnapp"
+
+
+def test_dedupe_same_line_shared_cwe_and_same_title():
+    from vibesec.models import Category, Finding, ScanResult, Severity
+
+    r = ScanResult(target="t")
+    r.add([
+        Finding("SQL montado", Severity.HIGH, Category.CODE, "vibesec-sast", file="a.py", line=5, cwe=["CWE-89"]),
+        Finding("SQL string", Severity.HIGH, Category.CODE, "semgrep", file="a.py", line=5, cwe=["CWE-915", "CWE-89"]),
+        Finding("Debug on", Severity.MEDIUM, Category.CODE, "semgrep", file="a.py", line=9, rule_id="x"),
+        Finding("Debug on", Severity.MEDIUM, Category.CODE, "semgrep", file="a.py", line=9, rule_id="y"),
+    ])
+    r.dedupe()
+    assert len(r.findings) == 2
+
+
+def test_summary_fix_keeps_ellipsis_and_falls_back_to_cwe():
+    from vibesec.triage import FIX_BY_CWE, first_sentence
+
+    assert first_sentence("Use cursor.execute('... WHERE id = %s', (id,)). Depois teste.").endswith("(id,))")
+    assert "parametrizadas" in FIX_BY_CWE["CWE-89"]
+
+
+def test_banner_has_shield_and_wordmark():
+    from vibesec.brand import banner
+
+    text = banner("9.9.9").plain
+    assert "█████▄   ▄█████" in text and "v9.9.9" in text and "╚═══╝" in text

@@ -1,6 +1,6 @@
 <div align="center">
 
-# VibeSec
+<img src="assets/banner.png" alt="VibeSec" width="100%">
 
 **Pentest de ponta a ponta para SaaS, sites e APIs, a partir do repositório.**
 
@@ -16,6 +16,20 @@ Aponte para um repositório do GitHub. O VibeSec lê o código inteiro, sobe a a
 pip install "vibesec @ git+https://github.com/caioribi7/vibesec"
 vibesec scan dono/meu-saas
 ```
+
+<p align="center">
+  <img src="assets/screenshots/scan.png" alt="vibesec scan rodando contra um app de exemplo" width="100%">
+</p>
+
+<details>
+<summary><b>Mais prints</b>: resumo com o que corrigir primeiro e o <code>vibesec doctor</code></summary>
+<br>
+<img src="assets/screenshots/resumo.png" alt="Resumo do VibeSec: corrija primeiro e cadeias de ataque" width="100%">
+<br><br>
+<img src="assets/screenshots/doctor.png" alt="vibesec doctor mostrando as ferramentas disponíveis" width="100%">
+</details>
+
+> Os prints são do scan estático do [`tests/fixtures/vulnapp`](tests/fixtures/vulnapp), o app vulnerável de propósito que a CI também ataca com a sandbox completa.
 
 ---
 
@@ -308,6 +322,10 @@ vibesec masterbase off           # desliga (não apaga dados)
 ```
 
 Também aparece no menu (`vibesec` → Integrações). O Masterbase roda com uma config própria (`~/.vibesec/masterbase.toml`). Com o usuário `postgres`, o painel ignora RLS (visão de administrador).
+
+## Logo
+
+O escudo tem o **V** no recorte do topo e na ponta, e o **S** vazado no corpo. Arquivos em [`assets/`](assets): `logo.svg` (degradê), `logo-black.svg` (uma cor) e `banner.svg`.
 
 ## Desenvolvimento
 

@@ -293,6 +293,30 @@ def attack_chains(findings: list[Finding]) -> list[str]:
 
 # ------------------------------------------------------------------ resumo
 
+
+# correção padrão quando a ferramenta não traz texto de remediação
+FIX_BY_CWE = {
+    "CWE-89": "Use consultas parametrizadas (placeholders) ou o ORM, nunca concatene entrada do usuário",
+    "CWE-78": "Não use shell; passe uma lista de argumentos e valide a entrada contra uma lista permitida",
+    "CWE-79": "Escape a saída (templates com autoescape) e não monte HTML com entrada do usuário",
+    "CWE-94": "Nunca avalie ou renderize como template algo vindo do usuário",
+    "CWE-1336": "Use render_template com arquivo fixo e passe a entrada só como variável",
+    "CWE-502": "Não desserialize dados não confiáveis; use JSON",
+    "CWE-489": "Desligue o modo debug em produção",
+    "CWE-250": "Rode o container com um usuário sem privilégios (USER no Dockerfile)",
+    "CWE-798": "Tire o segredo do código, revogue a credencial e use variável de ambiente ou cofre",
+    "CWE-327": "Use um algoritmo forte (bcrypt/argon2 para senhas, SHA-256+ para integridade)",
+    "CWE-22": "Normalize o caminho e confira que ele fica dentro da pasta permitida",
+    "CWE-918": "Valide o destino contra uma lista permitida antes de fazer a requisição",
+}
+
+
+def first_sentence(s: str | None) -> str:
+    """Primeira frase sem cortar reticências nem código ('... WHERE id = %s')."""
+    s = " ".join((s or "").split())
+    return re.split(r"(?<=[a-zà-ú0-9)\]])\.\s", s, maxsplit=1)[0].rstrip(".")
+
+
 def summary(result: ScanResult) -> str:
     act = result.active
     c = result.counts()
@@ -322,9 +346,9 @@ def summary(result: ScanResult) -> str:
         if key in seen:
             continue
         seen.add(key)
-        fix = (f.remediation or "").split(". ")[0].rstrip(".")
+        fix = first_sentence(f.remediation) or next((FIX_BY_CWE[c] for c in f.cwe if c in FIX_BY_CWE), "")
         tag = " (explorado)" if f.confirmed else ""
-        todo.append(f"{len(todo) + 1}. **{f.title}**{tag} em `{f.location}`: {fix}.")
+        todo.append(f"{len(todo) + 1}. **{f.title}**{tag} em `{f.location}`" + (f": {fix}." if fix else "."))
         if len(todo) == 5:
             break
     if todo:

@@ -150,16 +150,19 @@ class ScanResult:
     def dedupe(self) -> None:
         """O mesmo problema apontado por várias ferramentas vira um achado só.
 
-        Chave: fingerprint exato, ou mesma linha + mesmo CWE (ex.: SQLi visto por vibesec, semgrep e bandit).
+        Chave: fingerprint exato, mesma linha + algum CWE em comum, ou mesma linha + mesmo título (ex.: SQLi visto por vibesec, semgrep e bandit).
         Fica o texto do achado mais severo (empate: o primeiro, que é o embutido em português).
         """
         seen: dict[str, Finding] = {}
         alias: dict[tuple, str] = {}
         for f in self.findings:
             k = f.fingerprint
-            loc_key = (f.category.value, f.file, f.line, f.cwe[0]) if f.file and f.line and f.cwe else None
-            if k not in seen and loc_key in alias:
-                k = alias[loc_key]
+            loc_keys: list[tuple] = []
+            if f.file and f.line:
+                loc_keys = [(f.category.value, f.file, f.line, c) for c in f.cwe]
+                loc_keys.append((f.file, f.line, f.title.lower()))  # mesma mensagem de regras diferentes
+            if k not in seen:
+                k = next((alias[lk] for lk in loc_keys if lk in alias), k)
             if k in seen:
                 cur = seen[k]
                 if f.severity.rank > cur.severity.rank:
@@ -173,8 +176,8 @@ class ScanResult:
                         cur.tool = f"{cur.tool}+{t}"
             else:
                 seen[k] = f
-                if loc_key:
-                    alias.setdefault(loc_key, k)
+                for lk in loc_keys:
+                    alias.setdefault(lk, k)
         self.findings = sorted(
             seen.values(), key=lambda f: (-f.severity.rank, not f.confirmed, f.category.value, f.location)
         )

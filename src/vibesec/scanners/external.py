@@ -92,7 +92,7 @@ class SemgrepScanner(Scanner):
                 rule_id=r.get("check_id"), cwe=cwe, description=ex.get("message", ""),
                 evidence=None if "requires login" in lines else lines.strip()[:300],
                 references=_as_list(meta.get("references"))[:3],
-                remediation=ex.get("fix") or None,
+                # extra.fix do semgrep é código de autofix, não texto: a correção vem do CWE na triagem
             ))
         return out
 

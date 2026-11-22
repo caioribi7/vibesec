@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <title>VibeSec</title>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#D946EF"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <mask id="s">
+      <rect width="256" height="256" fill="#fff"/>
+      <path d="M158 122 C152 104 104 102 102 128 C100 152 156 146 156 172 C156 198 106 200 98 180" fill="none" stroke="#000" stroke-width="20" stroke-linecap="round"/>
+    </mask>
+  </defs>
+  <path mask="url(#s)" d="M36 36 H94 L128 82 L162 36 H220 V128 C220 178 182 214 128 236 C74 214 36 178 36 128 Z" fill="url(#g)"/>
+</svg>
