@@ -100,7 +100,12 @@ def nuclei(sb: Sandbox, work: Path, depth: str) -> list[Finding]:
         args += ["-severity", "low,medium,high,critical", "-as"]
     else:
         args += ["-severity", "info,low,medium,high,critical"]
-    # pub: baixar templates na 1ª execução; int: alcançar o alvo
+    # templates ficam no volume vibesec-nuclei; baixa/atualiza só pela rede pública (o alvo nunca vê isso)
+    up = run_container(TOOLS["nuclei"].image, ["-ut", "-silent", "-nc"], [sb.net_pub], timeout=600,
+                       extra=["-v", "vibesec-nuclei:/root"])
+    if up.returncode != 0 and "[FTL]" in (up.stderr or ""):
+        raise RuntimeError("não consegui baixar os templates do nuclei: " + up.stderr.strip()[-300:])
+    # pub + int: alcançar o alvo pela rede interna
     r = run_container(TOOLS["nuclei"].image, args, [sb.net_pub, sb.net_int], timeout=3600,
                       extra=["-v", "vibesec-nuclei:/root"])
     (work / "nuclei.jsonl").write_text(r.stdout or "", encoding="utf-8")
