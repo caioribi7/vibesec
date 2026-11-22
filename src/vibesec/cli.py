@@ -78,8 +78,8 @@ def scan(
                               help="static: só código. full: código + ataques na sandbox. auto: full se tiver Docker."),
     depth: Depth = typer.Option(Depth.standard, "--depth", "-d", help="quick, standard ou deep (mais lento e completo)."),
     branch: Optional[str] = typer.Option(None, "--branch", "-b", help="Branch a analisar."),
-    ai: Optional[bool] = typer.Option(None, "--ai/--no-ai", help="Triagem com Claude (padrão: liga se houver ANTHROPIC_API_KEY)."),
-    ai_model: str = typer.Option("claude-opus-5-5", "--ai-model", help="Modelo Claude da triagem."),
+    offline: bool = typer.Option(False, "--offline",
+                                 help="Máquina sem internet: nenhuma ferramenta acessa a rede (bases de `vibesec update`)."),
     port: Optional[int] = typer.Option(None, "--port", "-p", help="Porta em que a aplicação escuta."),
     run_cmd: Optional[str] = typer.Option(None, "--run-cmd", help="Comando para iniciar a aplicação na sandbox."),
     out: Path = typer.Option(Path("vibesec-reports"), "--out", "-o", help="Pasta dos relatórios."),
@@ -106,18 +106,22 @@ def scan(
     if fail_on and fail_on.lower() not in {s.value for s in Severity}:
         raise typer.BadParameter("use critical, high, medium, low ou info", param_hint="--fail-on")
 
+    if offline and not Path(target).exists():
+        console.print("[red]No modo offline o alvo precisa ser uma pasta local[/] (clone o repositório antes).")
+        raise typer.Exit(2)
+
     if not quiet:
         console.print(BANNER.format(v=__version__))
 
     if mode != Mode.static and not no_docker and not yes and sys.stdin.isatty():
         console.print(
             "[yellow]![/] No modo completo o código do repositório é [bold]construído e executado[/] num container "
-            "Docker isolado (sem internet) e atacado com nmap, nuclei e ZAP. Nada sai da sua máquina.")
+            "Docker isolado (sem internet) e atacado com nmap, nuclei e ZAP. Os ataques só miram essa cópia local.")
         if not Confirm.ask("Continuar?", default=True):
             raise typer.Exit()
 
     opts = ScanOptions(
-        target=target, mode=mode.value, depth=depth.value, branch=branch, ai=ai, ai_model=ai_model,
+        target=target, mode=mode.value, depth=depth.value, branch=branch, offline=offline,
         port=port, run_cmd=run_cmd, keep_sandbox=keep_sandbox,
         skip=tuple(s.strip() for s in skip.split(",") if s.strip()), allow_docker=not no_docker,
     )
@@ -190,14 +194,12 @@ def doctor(no_docker: bool = typer.Option(False, "--no-docker")):
 
     dock = docker_available()
     console.print(f"\nDocker: {'[green]rodando[/]' if dock else '[red]indisponível[/] (testes dinâmicos desligados)'}")
-    try:
-        import os
+    from vibesec import offline
 
-        import anthropic  # noqa: F401
-        key = bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
-        console.print(f"IA (Claude): {'[green]pronta[/]' if key else '[yellow]SDK instalado, falta ANTHROPIC_API_KEY[/]'}")
-    except ImportError:
-        console.print('IA (Claude): [yellow]instale com pip install "vibesec[ai]"[/]')
+    age = offline.last_update_age_days()
+    console.print("Bases offline: " + (f"[green]atualizadas há {age} dia(s)[/]" if age is not None and age < 8 else
+                                       f"[yellow]atualizadas há {age} dias (rode vibesec update)[/]" if age is not None
+                                       else "[dim]nunca baixadas (rode vibesec update para usar --offline)[/]"))
     from vibesec.integrations.masterbase import masterbase_binary
 
     dsn = config.database_url()
@@ -206,6 +208,52 @@ def doctor(no_docker: bool = typer.Option(False, "--no-docker")):
     if not dock:
         console.print("\n[dim]Para os ataques reais (nmap, nuclei, ZAP, tráfego) instale o Docker Desktop: "
                       "https://docs.docker.com/desktop/[/]")
+
+
+def _step_log(step: str, ok: bool, detail: str) -> None:
+    mark = "[green]✔[/]" if ok else "[red]✘[/]"
+    console.print(f"  {mark} {step:<34} [dim]{detail}[/]")
+
+
+@app.command()
+def update():
+    """[com internet] Baixa imagens, base de CVEs, templates e regras para usar depois com --offline."""
+    from vibesec import offline
+
+    console.print("[bold]Atualizando bases do VibeSec…[/]")
+    ok = offline.update(_step_log)
+    console.print("[green]Pronto.[/] Agora dá para rodar com --offline." if ok else
+                  "[yellow]Terminou com falhas[/] (veja acima). O que baixou continua valendo.")
+
+
+bundle = typer.Typer(help="Pacote para levar o VibeSec a uma máquina sem internet.")
+app.add_typer(bundle, name="bundle")
+
+
+@bundle.command("export")
+def bundle_export(dest: Path = typer.Argument(Path("vibesec-bundle"), help="Pasta de destino.")):
+    """[com internet] Exporta imagens, bases e regras para uma pasta (pendrive, rede interna)."""
+    from vibesec import offline
+
+    try:
+        offline.export_bundle(dest, _step_log)
+    except RuntimeError as e:
+        console.print(f"[red]{e}[/]")
+        raise typer.Exit(1)
+    console.print(f"[green]Pacote em {dest.resolve()}[/]. Na máquina offline: vibesec bundle import {dest.name}")
+
+
+@bundle.command("import")
+def bundle_import(src: Path = typer.Argument(..., exists=True, file_okay=False, help="Pasta do pacote.")):
+    """[sem internet] Carrega um pacote exportado por `vibesec bundle export`."""
+    from vibesec import offline
+
+    try:
+        offline.import_bundle(src, _step_log)
+    except (RuntimeError, OSError, ValueError) as e:
+        console.print(f"[red]{e}[/]")
+        raise typer.Exit(1)
+    console.print("[green]Pacote importado.[/] Rode: vibesec scan ./pasta-do-repo --offline")
 
 
 @app.command()
@@ -304,6 +352,7 @@ def menu() -> None:
         ("Escanear um repositório", "scan"),
         ("Verificar ferramentas instaladas", "doctor"),
         ("Histórico de scans", "history"),
+        ("Atualizar bases (CVEs, templates, regras) para uso offline", "update"),
         ("Integrações: Masterbase (painel visual dos resultados)", "masterbase"),
         ("Sair", "exit"),
     ]
@@ -317,13 +366,15 @@ def menu() -> None:
     if action == "scan":
         target = Prompt.ask("Repositório (URL do GitHub, dono/repo ou pasta)")
         depth = Prompt.ask("Profundidade", choices=["quick", "standard", "deep"], default="standard")
-        scan(target=target, mode=Mode.auto, depth=Depth(depth), branch=None, ai=None, ai_model="claude-opus-5-5",
+        scan(target=target, mode=Mode.auto, depth=Depth(depth), branch=None, offline=False,
              port=None, run_cmd=None, out=Path("vibesec-reports"), formats="html,md,json,sarif", skip="",
              fail_on=None, keep_sandbox=False, no_docker=False, save_db=None, yes=False, quiet=True)
     elif action == "doctor":
         doctor(no_docker=False)
     elif action == "history":
         history(limit=20)
+    elif action == "update":
+        update()
     elif action == "masterbase":
         dsn = config.database_url()
         console.print("\nO Masterbase abre os scans num painel web: filtrar achados, marcar como corrigido, "

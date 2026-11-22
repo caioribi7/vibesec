@@ -28,7 +28,7 @@ create table if not exists vibesec_scans (
   medium int not null default 0,
   low int not null default 0,
   info int not null default 0,
-  ai_summary text,
+  summary text,
   started_at timestamptz,
   finished_at timestamptz,
   report jsonb not null
@@ -48,7 +48,8 @@ create table if not exists vibesec_findings (
   cve text,
   description text,
   remediation text,
-  ai_notes text,
+  notes text,
+  confidence text,
   status text not null default 'aberto'
 );
 create index if not exists vibesec_findings_scan_idx on vibesec_findings(scan_id);
@@ -78,19 +79,20 @@ def save_scan(result: ScanResult, dsn: str) -> int:
         cur.execute(SCHEMA_SQL)
         cur.execute(
             """insert into vibesec_scans (target, commit_sha, score, grade, critical, high, medium, low, info,
-                 ai_summary, started_at, finished_at, report)
+                 summary, started_at, finished_at, report)
                values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning id""",
             (result.target, result.commit, result.score, result.grade, c["critical"], c["high"], c["medium"],
-             c["low"], c["info"], result.ai_summary, result.started_at, result.finished_at,
+             c["low"], c["info"], result.summary, result.started_at, result.finished_at,
              json.dumps(result.to_dict(), ensure_ascii=False)),
         )
         scan_id = cur.fetchone()[0]
         cur.executemany(
             """insert into vibesec_findings (scan_id, fingerprint, severity, category, title, location, tool,
-                 confirmed, false_positive, cwe, cve, description, remediation, ai_notes)
-               values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                 confirmed, false_positive, cwe, cve, description, remediation, notes, confidence)
+               values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             [(scan_id, f.fingerprint, f.severity.value, f.category.value, f.title, f.location, f.tool, f.confirmed,
-              f.false_positive, ",".join(f.cwe), ",".join(f.cve), f.description, f.remediation, f.ai_notes)
+              f.false_positive, ",".join(f.cwe), ",".join(f.cve), f.description, f.remediation, f.notes,
+              f.confidence)
              for f in result.findings],
         )
     return scan_id

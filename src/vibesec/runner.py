@@ -85,6 +85,7 @@ def run_tool(
     allow_docker: bool = True,
     env: dict[str, str] | None = None,
     docker_extra: list[str] | None = None,
+    offline: bool = False,
 ) -> subprocess.CompletedProcess:
     """Roda uma ferramenta estática. Use {src} e {out} nos argumentos."""
     tool = TOOLS[tool_name]
@@ -106,6 +107,8 @@ def run_tool(
         "-w", "/src",
         "--security-opt", "no-new-privileges",
     ]
+    if offline:
+        cmd += ["--network", "none"]
     for k, v in (env or {}).items():
         cmd += ["-e", f"{k}={v}"]
     cmd += docker_extra or []

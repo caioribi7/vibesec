@@ -47,9 +47,23 @@ class SemgrepScanner(Scanner):
     tool = "semgrep"
 
     def run(self, ctx: ScanContext) -> list[Finding]:
-        configs = ["p/default", "p/owasp-top-ten", "p/secrets"]
-        if ctx.depth == "deep":
-            configs += ["p/security-audit", "p/cwe-top-25"]
+        from vibesec.offline import SEMGREP_PACKS, semgrep_rules
+
+        packs = SEMGREP_PACKS["deep" if ctx.depth == "deep" else "standard"]
+        configs = [f"p/{p}" for p in packs]
+        if ctx.offline:
+            # regras baixadas por `vibesec update`, copiadas para a pasta montada em /out
+            files = semgrep_rules(packs)
+            if not files:
+                from vibesec.runner import ToolUnavailable
+
+                raise ToolUnavailable("sem regras locais do semgrep (rode `vibesec update` com internet)")
+            rules_dir = ctx.work / "semgrep-rules"
+            rules_dir.mkdir(parents=True, exist_ok=True)
+            configs = []
+            for f in files:
+                (rules_dir / f.name).write_bytes(f.read_bytes())
+                configs.append("{out}/semgrep-rules/" + f.name)
         args = ["scan", "--json", "--quiet", "--metrics=off", "--timeout", "30"]
         for c in configs:
             args += ["--config", c]
@@ -57,7 +71,7 @@ class SemgrepScanner(Scanner):
             args += ["--exclude", e]
         args.append("{src}")
         p = run_tool("semgrep", args, ctx.root, ctx.work, ctx.timeout, ctx.allow_docker,
-                     env={"SEMGREP_SEND_METRICS": "off"})
+                     env={"SEMGREP_SEND_METRICS": "off"}, offline=ctx.offline)
         data = _json(p.stdout)
         if data is None:
             raise ExternalError((p.stderr or "saída vazia").strip()[-400:])
@@ -123,7 +137,8 @@ class GitleaksScanner(Scanner):
             args.append("--no-git")
         # docker: o repo é montado read-only e pertence a outro usuário
         p = run_tool("gitleaks", args, ctx.root, ctx.work, ctx.timeout, ctx.allow_docker,
-                     env={"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "safe.directory", "GIT_CONFIG_VALUE_0": "*"})
+                     env={"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "safe.directory", "GIT_CONFIG_VALUE_0": "*"},
+                     offline=ctx.offline)
         report = ctx.work / "gitleaks.json"
         if not report.exists():
             raise ExternalError((p.stderr or p.stdout or "sem relatório").strip()[-400:])
@@ -154,8 +169,10 @@ class TrivyScanner(Scanner):
         if ctx.depth == "quick":
             args += ["--severity", "HIGH,CRITICAL"]
         args.append("{src}")
+        if ctx.offline:
+            args[-1:-1] = ["--skip-db-update", "--skip-java-db-update", "--offline-scan", "--skip-check-update"]
         p = run_tool("trivy", args, ctx.root, ctx.work, ctx.timeout, ctx.allow_docker,
-                     docker_extra=["-v", "vibesec-trivy-cache:/root/.cache/trivy"])
+                     docker_extra=["-v", "vibesec-trivy-cache:/root/.cache/trivy"], offline=ctx.offline)
         data = _json(p.stdout)
         if data is None:
             raise ExternalError((p.stderr or "saída vazia").strip()[-400:])
@@ -190,6 +207,9 @@ class TrivyScanner(Scanner):
 class OsvScanner(Scanner):
     name = "osv-scanner"
     tool = "osv-scanner"
+
+    def applicable(self, ctx: ScanContext) -> bool:
+        return not ctx.offline  # consulta a API do OSV.dev; offline o Trivy cobre dependências com a base local
 
     def run(self, ctx: ScanContext) -> list[Finding]:
         p = run_tool("osv-scanner", ["scan", "source", "-r", "--format", "json", "{src}"],

@@ -61,10 +61,10 @@ def print_summary(result: ScanResult, console: Console, limit: int = 25) -> None
     console.print(t)
     if len(active) > limit:
         console.print(f"[dim]… e mais {len(active) - limit}. Veja o relatório completo.[/]")
-    if result.ai_summary:
+    if result.summary:
         from rich.markdown import Markdown
 
-        console.print(Panel(Markdown(result.ai_summary), title="Resumo da IA", border_style="magenta"))
+        console.print(Panel(Markdown(result.summary), title="Resumo do VibeSec", border_style="magenta"))
 
 
 # ---------------------------------------------------------------- arquivos
@@ -91,8 +91,8 @@ def to_markdown(r: ScanResult) -> str:
         "| Crítica | Alta | Média | Baixa | Info |", "|---|---|---|---|---|",
         f"| {c['critical']} | {c['high']} | {c['medium']} | {c['low']} | {c['info']} |", "",
     ]
-    if r.ai_summary:
-        lines += ["## Resumo", "", r.ai_summary.strip(), ""]
+    if r.summary:
+        lines += ["## Resumo", "", r.summary.strip(), ""]
     lines += ["## Stack", "", f"- Linguagens: {', '.join(r.stack.get('languages', {})) or '-'}",
               f"- Frameworks: {', '.join(r.stack.get('frameworks', [])) or '-'}", ""]
     lines += ["## Ferramentas", "", "| Ferramenta | Status | Achados |", "|---|---|---|"]
@@ -108,14 +108,14 @@ def to_markdown(r: ScanResult) -> str:
         if f.cve:
             meta.append(", ".join(f.cve))
         lines += [" · ".join(meta), ""]
-        for label, val in (("Descrição", f.description), ("Análise da IA", f.ai_notes),
+        for label, val in (("Descrição", f.description), ("Análise do VibeSec", f.notes),
                            ("Evidência", f.evidence and f"`{f.evidence}`"), ("Como corrigir", f.remediation)):
             if val:
                 lines += [f"**{label}:** {val}", ""]
     fps = [f for f in r.findings if f.false_positive]
     if fps:
         lines += ["## Descartados como falso positivo", ""]
-        lines += [f"- {f.title} (`{f.location}`): {f.ai_notes or ''}" for f in fps]
+        lines += [f"- {f.title} (`{f.location}`): {f.notes or ''}" for f in fps]
     lines += ["", f"_Gerado por VibeSec {__version__}_"]
     return "\n".join(lines)
 
@@ -136,7 +136,7 @@ def to_sarif(r: ScanResult) -> str:
                                                  "info": "0.0"}[f.severity.value]},
         })
         res = {"ruleId": rid, "level": SARIF_LEVEL[f.severity.value],
-               "message": {"text": (f.ai_notes or f.description or f.title)[:1000]},
+               "message": {"text": (f.notes or f.description or f.title)[:1000]},
                "partialFingerprints": {"vibesec/v1": f.fingerprint}}
         if f.file:
             loc = {"physicalLocation": {"artifactLocation": {"uri": f.file}}}
@@ -166,7 +166,7 @@ def to_html(r: ScanResult) -> str:
             badges += '<span class="tag ok">confirmado</span>'
         details = "".join(
             f"<dt>{label}</dt><dd>{e(str(val))}</dd>" for label, val in (
-                ("Descrição", f.description), ("Análise da IA", f.ai_notes), ("Evidência", f.evidence),
+                ("Descrição", f.description), ("Análise do VibeSec", f.notes), ("Evidência", f.evidence),
                 ("Como corrigir", f.remediation), ("CWE/CVE", ", ".join(f.cwe + f.cve)),
                 ("Referências", " ".join(f.references))) if val)
         rows.append(
@@ -178,8 +178,8 @@ def to_html(r: ScanResult) -> str:
         f"<tr><td>{e(t.name)}</td><td class='st-{t.status}'>{e(t.status)}</td><td>{e(t.detail)}</td>"
         f"<td>{t.findings}</td><td>{t.seconds:.0f}s</td></tr>" for t in r.tools)
     summary = ""
-    if r.ai_summary:
-        summary = f'<section class="ai"><h2>Resumo da IA</h2><pre>{e(r.ai_summary)}</pre></section>'
+    if r.summary:
+        summary = f'<section class="ai"><h2>Resumo</h2><pre>{e(r.summary)}</pre></section>'
     cats = sorted({f.category.value for f in r.active})
     filters = "".join(f'<button data-cat="{c_}">{c_}</button>' for c_ in cats)
     return HTML_TEMPLATE.format(

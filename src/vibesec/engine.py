@@ -23,8 +23,7 @@ class ScanOptions:
     mode: str = "auto"          # auto | static | full
     depth: str = "standard"     # quick | standard | deep
     branch: str | None = None
-    ai: bool | None = None      # None = automático (usa se houver credencial)
-    ai_model: str = "claude-opus-5-5"
+    offline: bool = False       # nenhuma ferramenta acessa a rede; usa bases baixadas por `vibesec update`
     port: int | None = None
     run_cmd: str | None = None
     keep_sandbox: bool = False
@@ -70,7 +69,16 @@ class Engine:
                     f"{st['files']} arquivos  ·  {', '.join(list(st['languages'])[:5]) or 'linguagem ?'}"
                     + (f"  ·  {', '.join(st['frameworks'])}" if st["frameworks"] else ""))
 
-            ctx = ScanContext(root=target.path, work=work, stack=st, depth=o.depth, allow_docker=o.allow_docker)
+            ctx = ScanContext(root=target.path, work=work, stack=st, depth=o.depth, allow_docker=o.allow_docker,
+                              offline=o.offline)
+            if o.offline:
+                from vibesec import offline
+
+                age = offline.last_update_age_days()
+                c.print("[cyan]Modo offline:[/] nenhuma ferramenta acessa a rede. "
+                        + (f"[dim]Bases atualizadas há {age} dia(s).[/]" if age is not None
+                           else "[yellow]Bases nunca baixadas: rode `vibesec update` com internet "
+                                "(ou `vibesec bundle import`).[/]"))
 
             c.print("\n[bold magenta]1. Análise estática[/] [dim](código, segredos, dependências)[/]")
             with c.status("") as status:
@@ -90,7 +98,7 @@ class Engine:
                         "use --mode full depois de instalar)[/]")
 
             result.dedupe()
-            self._ai(result, target.path)
+            self._triage(result, target.path)
             result.finished_at = datetime.now(timezone.utc).isoformat()
             return result
         finally:
@@ -111,7 +119,7 @@ class Engine:
             c.print("  [red]✘ Docker não está rodando.[/] Instale o Docker Desktop e tente de novo.")
             result.tools.append(ToolRun("sandbox", "error", "Docker indisponível"))
             return
-        sb = Sandbox(root, result.stack, port=o.port, run_cmd=o.run_cmd, keep=o.keep_sandbox)
+        sb = Sandbox(root, result.stack, port=o.port, run_cmd=o.run_cmd, keep=o.keep_sandbox, offline=o.offline)
         try:
             with c.status("Construindo e subindo a aplicação na sandbox…"):
                 t0 = time.time()
@@ -137,7 +145,8 @@ class Engine:
                 except RuntimeError as e:
                     c.print(f"  [dim]captura de tráfego indisponível: {e}[/]")
             with c.status("") as status:
-                self._step(result, "vibesec-probe", lambda: Prober(sb.host_url).run(), status)
+                pages = {"quick": 20, "standard": 40, "deep": 150}[o.depth]
+                self._step(result, "vibesec-probe", lambda: Prober(sb.host_url, max_pages=pages).run(), status)
                 self._step(result, "nmap", lambda: nmap(sb, work, o.depth), status)
                 self._step(result, "nuclei", lambda: nuclei(sb, work, o.depth), status)
                 self._step(result, "zap", lambda: zap(sb, work, o.depth), status)
@@ -153,31 +162,17 @@ class Engine:
             with c.status("Desmontando a sandbox…"):
                 sb.stop()
 
-    # ---------------------------------------------------------------------- IA
-    def _ai(self, result: ScanResult, root: Path) -> None:
-        import os
+    # ----------------------------------------------------------------- triagem
+    def _triage(self, result: ScanResult, root: Path) -> None:
+        from vibesec.triage import triage
 
-        o, c = self.o, self.c
-        want = o.ai
-        if want is None:
-            want = bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
-            if not want:
-                c.print("\n[dim]Triagem com IA desligada (defina ANTHROPIC_API_KEY ou use --ai).[/]")
-                return
-        if not want:
-            return
-        from vibesec.ai import AIUnavailable, triage
-
-        c.print(f"\n[bold magenta]3. Triagem com IA[/] [dim]({o.ai_model})[/]")
+        c = self.c
+        c.print("\n[bold magenta]3. Triagem[/] [dim](fluxo de dados, contexto, correlação código × sandbox)[/]")
         t0 = time.time()
-        try:
-            with c.status("Claude revisando os achados…"):
-                triage(result, root, model=o.ai_model, log=lambda m: c.print(f"  [dim]{m}[/]"))
-            result.tools.append(ToolRun("claude", "ok", o.ai_model, time.time() - t0,
-                                        sum(1 for f in result.findings if f.ai_notes)))
-        except AIUnavailable as e:
-            c.print(f"  [yellow]IA indisponível:[/] {e}")
-            result.tools.append(ToolRun("claude", "skipped", str(e)))
+        s = triage(result, root)
+        result.tools.append(ToolRun("triage", "ok", "", time.time() - t0, len(result.active)))
+        c.print(f"  [green]✔[/] {s['fp']} falsos positivos descartados · {s['up']} severidades elevadas · "
+                f"{s['down']} rebaixadas · {s['linked']} achados do código confirmados pela sandbox")
 
 
 def tool_matrix(allow_docker: bool = True) -> list[tuple[str, str, str, str]]:

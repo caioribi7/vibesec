@@ -90,7 +90,7 @@ def test_cli_static_scan(vulnapp, tmp_path, monkeypatch):
     monkeypatch.setattr(cfg, "HISTORY", tmp_path / "home" / "history.jsonl")
     monkeypatch.setattr(cfg, "CONFIG", tmp_path / "home" / "config.json")
     out = tmp_path / "reports"
-    res = CliRunner().invoke(app, ["scan", str(vulnapp), "--mode", "static", "--no-ai", "-y", "-q",
+    res = CliRunner().invoke(app, ["scan", str(vulnapp), "--mode", "static", "-y", "-q",
                                    "--no-docker", "--out", str(out), "--fail-on", "critical"])
     assert res.exit_code == 1, res.output  # o fixture tem achados críticos
     report = next(out.rglob("report.json"))

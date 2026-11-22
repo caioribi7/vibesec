@@ -36,8 +36,12 @@ DEBUG_PORTS = {
 def nmap(sb: Sandbox, work: Path, depth: str) -> list[Finding]:
     ports = ["-p-"] if depth != "quick" else ["--top-ports", "1000"]
     args = ["-sV", "-Pn", "-T4", "--min-rate", "1500", "--open", "-oX", "-", *ports]
-    if depth != "quick":
+    if depth == "standard":
         args += ["-sC", "--script", "default,vuln,http-enum,http-headers,http-methods"]
+    elif depth == "deep":
+        # todas as sondas de versão + scripts de vulnerabilidade, autenticação fraca e enumeração HTTP
+        args += ["--version-all", "-sC", "--script",
+                 "default,vuln,auth,http-enum,http-headers,http-methods,http-security-headers,ssl-enum-ciphers"]
     args.append("target")
     r = run_container(TOOLS["nmap"].image, args, [sb.net_int], timeout=1800)
     (work / "nmap.xml").write_text(r.stdout or "", encoding="utf-8")
@@ -100,13 +104,13 @@ def nuclei(sb: Sandbox, work: Path, depth: str) -> list[Finding]:
         args += ["-severity", "low,medium,high,critical", "-as"]
     else:
         args += ["-severity", "info,low,medium,high,critical"]
-    # templates ficam no volume vibesec-nuclei; baixa/atualiza só pela rede pública (o alvo nunca vê isso)
-    up = run_container(TOOLS["nuclei"].image, ["-ut", "-silent", "-nc"], [sb.net_pub], timeout=600,
-                       extra=["-v", "vibesec-nuclei:/root"])
-    if up.returncode != 0 and "[FTL]" in (up.stderr or ""):
-        raise RuntimeError("não consegui baixar os templates do nuclei: " + up.stderr.strip()[-300:])
-    # pub + int: alcançar o alvo pela rede interna
-    r = run_container(TOOLS["nuclei"].image, args, [sb.net_pub, sb.net_int], timeout=3600,
+    # templates ficam no volume vibesec-nuclei; online: atualiza pela rede pública (o alvo nunca vê isso)
+    if not sb.offline:
+        up = run_container(TOOLS["nuclei"].image, ["-ut", "-silent", "-nc"], [sb.net_pub], timeout=600,
+                           extra=["-v", "vibesec-nuclei:/root"])
+        if up.returncode != 0 and "[FTL]" in (up.stderr or ""):
+            raise RuntimeError("não consegui baixar os templates do nuclei: " + up.stderr.strip()[-300:])
+    r = run_container(TOOLS["nuclei"].image, args, sb.tool_networks, timeout=3600,
                       extra=["-v", "vibesec-nuclei:/root"])
     (work / "nuclei.jsonl").write_text(r.stdout or "", encoding="utf-8")
     if not (r.stdout or "").strip() and re.search(r"(?i)(\[FTL\]|could not|no templates|error)", r.stderr or ""):
@@ -144,7 +148,9 @@ def zap(sb: Sandbox, work: Path, depth: str) -> list[Finding]:
     args = [script, "-t", sb.internal_url, "-J", "zap.json", "-I", "-m", minutes]
     if depth == "deep":
         args += ["-j"]  # spider AJAX também
-    r = run_container(TOOLS["zap"].image, args, [sb.net_pub, sb.net_int], mounts={zdir: "/zap/wrk"},
+    if sb.offline:
+        args += ["-z", "-config check.onstart=false"]  # não procura atualizações de add-ons
+    r = run_container(TOOLS["zap"].image, args, sb.tool_networks, mounts={zdir: "/zap/wrk"},
                       timeout=7200, extra=["-u", "0"])
     report = zdir / "zap.json"
     if not report.exists():

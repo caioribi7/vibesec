@@ -89,7 +89,8 @@ class Finding:
     url: str | None = None
     confirmed: bool = False      # explorado de fato na sandbox
     false_positive: bool = False  # marcado pela triagem
-    ai_notes: str | None = None
+    notes: str | None = None      # explicação da triagem
+    confidence: str = "medium"    # high | medium | low (quão provável é ser explorável)
     references: list[str] = field(default_factory=list)
 
     @property
@@ -140,7 +141,7 @@ class ScanResult:
     stack: dict = field(default_factory=dict)
     findings: list[Finding] = field(default_factory=list)
     tools: list[ToolRun] = field(default_factory=list)
-    ai_summary: str | None = None
+    summary: str | None = None
     sandbox: dict = field(default_factory=dict)
 
     def add(self, findings: list[Finding]) -> None:
@@ -212,7 +213,7 @@ class ScanResult:
             "counts": self.counts(),
             "stack": self.stack,
             "sandbox": self.sandbox,
-            "ai_summary": self.ai_summary,
+            "summary": self.summary,
             "tools": [asdict(t) for t in self.tools],
             "findings": [f.to_dict() for f in self.findings],
         }
@@ -223,7 +224,7 @@ class ScanResult:
         r.finished_at = d.get("finished_at")
         r.stack = d.get("stack", {})
         r.sandbox = d.get("sandbox", {})
-        r.ai_summary = d.get("ai_summary")
+        r.summary = d.get("summary")
         r.tools = [ToolRun(**t) for t in d.get("tools", [])]
         r.findings = [Finding.from_dict(f) for f in d.get("findings", [])]
         return r

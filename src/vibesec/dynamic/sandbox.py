@@ -56,7 +56,13 @@ class Sandbox:
     port: int | None = None
     run_cmd: str | None = None
     keep: bool = False
+    offline: bool = False  # ferramentas só na rede interna; nada sai para a internet
     log: list[str] = field(default_factory=list)
+
+    @property
+    def tool_networks(self) -> list[str]:
+        """Redes das ferramentas de ataque. Online: pública (atualizações) + interna. Offline: só interna."""
+        return [self.net_int] if self.offline else [self.net_pub, self.net_int]
 
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     image: str = ""
@@ -156,7 +162,10 @@ class Sandbox:
         self.net_pub = f"vibesec-pub-{self.id}"
 
         self.log.append("Construindo imagem do alvo…")
-        r = docker("build", "-q", "-f", str(df), "-t", self.image, str(self.root), timeout=build_timeout)
+        build = ["build", "-q", "-f", str(df), "-t", self.image]
+        if self.offline:
+            build += ["--network", "none"]  # usa só camadas/imagens já presentes na máquina
+        r = docker(*build, str(self.root), timeout=build_timeout)
         if r.returncode != 0:
             raise SandboxError(f"Falha no docker build:\n{(r.stderr or r.stdout)[-1500:]}")
 

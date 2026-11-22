@@ -35,7 +35,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e .
-      - run: vibesec scan tests/fixtures/vulnapp --mode full --depth quick --no-ai -y -q --out e2e
+      - run: vibesec scan tests/fixtures/vulnapp --mode full --depth quick -y -q --out e2e
       - name: Confere que a sandbox subiu e os ataques confirmaram falhas
         run: |
           python - <<'EOF'

@@ -14,6 +14,7 @@ class ScanContext:
     depth: str = "standard"  # quick | standard | deep
     allow_docker: bool = True
     timeout: int = 900
+    offline: bool = False    # containers com --network none; só bases locais
 
     def rel(self, path: str | Path | None) -> str | None:
         """Normaliza caminhos (locais ou /src/... do Docker) para relativos ao repo."""
