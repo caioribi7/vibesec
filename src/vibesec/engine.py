@@ -122,7 +122,8 @@ class Engine:
             result.sandbox = {"url": sb.internal_url, "port": sb.port, "generated_dockerfile": bool(sb.generated)}
         except (SandboxError, RuntimeError) as e:
             c.print(f"  [red]✘ Não consegui subir a aplicação:[/] {str(e)[:900]}")
-            result.tools.append(ToolRun("sandbox", "error", " ".join(str(e).split())[:200]))
+            msg = " ".join(str(e).split())
+            result.tools.append(ToolRun("sandbox", "error", msg if len(msg) <= 400 else msg[:120] + " … " + msg[-280:]))
             sb.stop()
             return
 

@@ -11,6 +11,7 @@ app = Flask(__name__)
 db = sqlite3.connect("app.db", check_same_thread=False)
 db.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")
 db.execute("INSERT OR IGNORE INTO users VALUES (1, 'ana')")
+db.commit()
 
 
 @app.route("/")

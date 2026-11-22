@@ -187,7 +187,8 @@ class Sandbox:
         while time.time() < deadline:
             state = docker("inspect", "-f", "{{.State.Running}}", self.target).stdout.strip()
             if state != "true":
-                logs = docker("logs", "--tail", "40", self.target).stdout + docker("logs", "--tail", "40", self.target).stderr
+                lr = docker("logs", "--tail", "40", self.target)
+                logs = (lr.stdout or "") + (lr.stderr or "")
                 raise SandboxError(f"A aplicação parou ao iniciar. Últimos logs:\n{logs[-1500:]}")
             try:
                 httpx.get(self.host_url, timeout=3, follow_redirects=False)
