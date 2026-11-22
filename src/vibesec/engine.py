@@ -26,6 +26,7 @@ class ScanOptions:
     offline: bool = False       # nenhuma ferramenta acessa a rede; usa bases baixadas por `vibesec update`
     port: int | None = None
     run_cmd: str | None = None
+    image: str | None = None    # imagem Docker pronta do app (pula o build)
     keep_sandbox: bool = False
     skip: tuple[str, ...] = ()
     allow_docker: bool = True
@@ -119,7 +120,8 @@ class Engine:
             c.print("  [red]✘ Docker não está rodando.[/] Instale o Docker Desktop e tente de novo.")
             result.tools.append(ToolRun("sandbox", "error", "Docker indisponível"))
             return
-        sb = Sandbox(root, result.stack, port=o.port, run_cmd=o.run_cmd, keep=o.keep_sandbox, offline=o.offline)
+        sb = Sandbox(root, result.stack, port=o.port, run_cmd=o.run_cmd, keep=o.keep_sandbox, offline=o.offline,
+                     prebuilt_image=o.image)
         try:
             with c.status("Construindo e subindo a aplicação na sandbox…"):
                 t0 = time.time()

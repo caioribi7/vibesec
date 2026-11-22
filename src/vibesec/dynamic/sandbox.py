@@ -57,6 +57,7 @@ class Sandbox:
     run_cmd: str | None = None
     keep: bool = False
     offline: bool = False  # ferramentas só na rede interna; nada sai para a internet
+    prebuilt_image: str | None = None  # usa esta imagem em vez de construir (nunca é apagada)
     log: list[str] = field(default_factory=list)
 
     @property
@@ -154,20 +155,30 @@ class Sandbox:
 
     # ------------------------------------------------------------------ ciclo
     def start(self, build_timeout: int = 1200, ready_timeout: int = 120) -> None:
-        df = self._dockerfile()
-        self.image = f"vibesec-target:{self.id}"
         self.target = f"vibesec-target-{self.id}"
         self.proxy = f"vibesec-proxy-{self.id}"
         self.net_int = f"vibesec-int-{self.id}"
         self.net_pub = f"vibesec-pub-{self.id}"
 
-        self.log.append("Construindo imagem do alvo…")
-        build = ["build", "-q", "-f", str(df), "-t", self.image]
-        if self.offline:
-            build += ["--network", "none"]  # usa só camadas/imagens já presentes na máquina
-        r = docker(*build, str(self.root), timeout=build_timeout)
-        if r.returncode != 0:
-            raise SandboxError(f"Falha no docker build:\n{(r.stderr or r.stdout)[-1500:]}")
+        if self.prebuilt_image:
+            # imagem pronta (ex.: trazida com docker save/load para uma máquina sem internet)
+            if docker("image", "inspect", self.prebuilt_image).returncode != 0:
+                raise SandboxError(f"Imagem {self.prebuilt_image} não existe nesta máquina (docker load -i …).")
+            self.port = self.port or self.stack.get("port") or 8080
+            self.log.append(f"Usando a imagem pronta {self.prebuilt_image}")
+        else:
+            df = self._dockerfile()
+            self.image = f"vibesec-target:{self.id}"
+            self.log.append("Construindo imagem do alvo…")
+            build = ["build", "-q", "-f", str(df), "-t", self.image]
+            if self.offline:
+                build += ["--network", "none"]  # usa só camadas/imagens já presentes na máquina
+            r = docker(*build, str(self.root), timeout=build_timeout)
+            if r.returncode != 0:
+                hint = ("\nSem internet o build não baixa dependências: construa a imagem do app antes e passe "
+                        "--image (docker save/load leva a imagem para a máquina offline).") if self.offline else ""
+                raise SandboxError(f"Falha no docker build:\n{(r.stderr or r.stdout)[-1500:]}{hint}")
+        run_image = self.prebuilt_image or self.image
 
         docker("network", "create", "--internal", self.net_int, check=True)
         docker("network", "create", self.net_pub, check=True)
@@ -175,7 +186,7 @@ class Sandbox:
         docker(
             "run", "-d", "--name", self.target, "--network", self.net_int, "--network-alias", "target",
             "--memory", "1g", "--cpus", "1.5", "--pids-limit", "512", "--security-opt", "no-new-privileges",
-            "-e", f"PORT={self.port}", "--label", "vibesec=target", self.image, check=True,
+            "-e", f"PORT={self.port}", "--label", "vibesec=target", run_image, check=True,
         )
         # proxy: única ponte entre o host e a rede interna
         docker(

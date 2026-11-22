@@ -59,7 +59,9 @@ def update(log: Log) -> bool:
             r = httpx.get(f"https://semgrep.dev/c/p/{pack}", timeout=60, follow_redirects=True,
                           headers={"User-Agent": "vibesec-update"})
             r.raise_for_status()
-            if "rules:" not in r.text[:2000]:
+            # o registry responde em JSON ({"rules": [...]}); JSON também é YAML válido para o semgrep
+            head = r.text[:2000]
+            if "rules:" not in head and '"rules"' not in head:
                 raise ValueError("resposta não é um ruleset")
             (RULES_DIR / f"semgrep-{pack}.yml").write_text(r.text, encoding="utf-8")
             log(f"regras semgrep p/{pack}", True, f"{len(r.text) // 1024} KB")

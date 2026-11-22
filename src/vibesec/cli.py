@@ -82,6 +82,8 @@ def scan(
                                  help="Máquina sem internet: nenhuma ferramenta acessa a rede (bases de `vibesec update`)."),
     port: Optional[int] = typer.Option(None, "--port", "-p", help="Porta em que a aplicação escuta."),
     run_cmd: Optional[str] = typer.Option(None, "--run-cmd", help="Comando para iniciar a aplicação na sandbox."),
+    image: Optional[str] = typer.Option(None, "--image",
+                                        help="Imagem Docker pronta do app (pula o build; útil no --offline)."),
     out: Path = typer.Option(Path("vibesec-reports"), "--out", "-o", help="Pasta dos relatórios."),
     formats: str = typer.Option("html,md,json,sarif", "--format", "-f", help="Formatos separados por vírgula."),
     skip: str = typer.Option("", "--skip", help="Ferramentas a pular, ex: zap,nuclei"),
@@ -122,7 +124,7 @@ def scan(
 
     opts = ScanOptions(
         target=target, mode=mode.value, depth=depth.value, branch=branch, offline=offline,
-        port=port, run_cmd=run_cmd, keep_sandbox=keep_sandbox,
+        port=port, run_cmd=run_cmd, image=image, keep_sandbox=keep_sandbox,
         skip=tuple(s.strip() for s in skip.split(",") if s.strip()), allow_docker=not no_docker,
     )
     try:
@@ -367,7 +369,7 @@ def menu() -> None:
         target = Prompt.ask("Repositório (URL do GitHub, dono/repo ou pasta)")
         depth = Prompt.ask("Profundidade", choices=["quick", "standard", "deep"], default="standard")
         scan(target=target, mode=Mode.auto, depth=Depth(depth), branch=None, offline=False,
-             port=None, run_cmd=None, out=Path("vibesec-reports"), formats="html,md,json,sarif", skip="",
+             port=None, run_cmd=None, image=None, out=Path("vibesec-reports"), formats="html,md,json,sarif", skip="",
              fail_on=None, keep_sandbox=False, no_docker=False, save_db=None, yes=False, quiet=True)
     elif action == "doctor":
         doctor(no_docker=False)

@@ -55,7 +55,9 @@ jobs:
           EOF
       # modo offline: bases baixadas antes, depois nenhum container acessa a internet
       - run: vibesec update
-      - run: vibesec scan tests/fixtures/vulnapp --mode full --depth quick --offline -y -q --out e2e-offline
+      # a máquina offline recebe o app já construído (aqui: build com internet; na vida real, docker save/load)
+      - run: docker build -q -t vulnapp:e2e tests/fixtures/vulnapp
+      - run: vibesec scan tests/fixtures/vulnapp --mode full --depth quick --offline --image vulnapp:e2e -y -q --out e2e-offline
       - name: Confere o modo offline
         run: |
           python - <<'EOF'

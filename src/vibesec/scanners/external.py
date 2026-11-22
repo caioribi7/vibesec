@@ -71,7 +71,7 @@ class SemgrepScanner(Scanner):
             args += ["--exclude", e]
         args.append("{src}")
         p = run_tool("semgrep", args, ctx.root, ctx.work, ctx.timeout, ctx.allow_docker,
-                     env={"SEMGREP_SEND_METRICS": "off"}, offline=ctx.offline)
+                     env={"SEMGREP_SEND_METRICS": "off", "PYTHONUTF8": "1"}, offline=ctx.offline)
         data = _json(p.stdout)
         if data is None:
             raise ExternalError((p.stderr or "saída vazia").strip()[-400:])

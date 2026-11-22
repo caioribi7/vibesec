@@ -175,7 +175,7 @@ A triagem é um algoritmo determinístico (`triage.py`): o código não sai da s
 | Bases (CVEs, templates, regras) | Atualizadas a cada execução | As do último `vibesec update` / pacote importado |
 | Containers das ferramentas estáticas | Com rede (baixam bases) | `--network none` |
 | Ferramentas de ataque | Rede pública (só atualizações) + rede interna | **Só a rede interna**: nenhuma rota para fora |
-| Build do app | Normal | `--network none` (dependências precisam estar no cache ou no repositório) |
+| Build do app | Normal | `--network none`; sem as dependências no cache, passe uma imagem pronta com `--image` |
 | OSV-Scanner | Ligado | Desligado (precisa da API); o Trivy cobre dependências com a base local |
 
 Nos dois modos, **os ataques só miram a sandbox local**. "Online" quer dizer apenas que as ferramentas podem baixar bases atualizadas.
@@ -186,11 +186,15 @@ Nos dois modos, **os ataques só miram a sandbox local**. "Online" quer dizer ap
 # na máquina com internet
 vibesec update                      # imagens, base de CVEs do Trivy, templates do nuclei, regras do Semgrep
 vibesec bundle export ./vibesec-bundle
+docker build -t meu-app ./meu-repo && docker save -o meu-app.tar meu-app   # o app já com dependências
 
-# leve a pasta (pendrive / rede interna) para a máquina sem internet
+# leve as pastas (pendrive / rede interna) para a máquina sem internet
 vibesec bundle import ./vibesec-bundle
-vibesec scan ./meu-repo --offline
+docker load -i meu-app.tar
+vibesec scan ./meu-repo --offline --image meu-app
 ```
+
+Sem internet, o `npm install`/`pip install` do build não funciona; por isso o app vai pronto em `--image`. A análise do código continua sendo feita sobre a pasta.
 
 ## Validação
 
@@ -257,6 +261,7 @@ vibesec report vibesec-reports/x/report.json -f html
 | `--depth` | `standard` | Veja a tabela abaixo |
 | `--offline` | | Nenhuma ferramenta acessa a rede |
 | `--port`, `--run-cmd` | detectados | Como iniciar a aplicação na sandbox |
+| `--image` | | Imagem Docker pronta do app (pula o build) |
 | `--skip` | | Ferramentas a pular, ex. `zap,nuclei` |
 | `--fail-on` | | Sai com código 1 se houver achado com essa severidade ou maior |
 | `--format` | `html,md,json,sarif` | Formatos de relatório |
