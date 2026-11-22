@@ -52,7 +52,8 @@ class Engine:
             result.tools.append(ToolRun(name, "skipped", str(e), time.time() - t0))
             self.c.print(f"  [dim]–[/] {name:<16} [dim]{e}[/]")
         except Exception as e:  # uma ferramenta quebrada não derruba o scan inteiro
-            msg = " ".join(str(e).split())[:200]
+            msg = " ".join(str(e).split())
+            msg = msg if len(msg) <= 220 else "…" + msg[-220:]  # o motivo real fica no fim
             result.tools.append(ToolRun(name, "error", msg, time.time() - t0))
             self.c.print(f"  [red]✘[/] {name:<16} [red]{msg}[/]")
 

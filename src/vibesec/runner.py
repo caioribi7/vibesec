@@ -19,13 +19,14 @@ class Tool:
     purpose: str
     install: str
     phase: str  # static | dynamic
+    docker_cmd: tuple[str, ...] = ()  # para imagens sem ENTRYPOINT (ex.: semgrep)
 
 
 TOOLS: dict[str, Tool] = {
     t.name: t
     for t in [
         Tool("semgrep", "semgrep", "semgrep/semgrep:latest", "SAST multi-linguagem (OWASP Top 10)",
-             "pip install semgrep", "static"),
+             "pip install semgrep", "static", docker_cmd=("semgrep",)),
         Tool("bandit", "bandit", None, "SAST para Python", "pip install bandit", "static"),
         Tool("gitleaks", "gitleaks", "zricethezav/gitleaks:latest", "Segredos no código e no histórico git",
              "https://github.com/gitleaks/gitleaks#installing", "static"),
@@ -108,7 +109,7 @@ def run_tool(
     for k, v in (env or {}).items():
         cmd += ["-e", f"{k}={v}"]
     cmd += docker_extra or []
-    cmd += [tool.image] + [a.replace("{src}", "/src").replace("{out}", "/out") for a in args]
+    cmd += [tool.image, *tool.docker_cmd] + [a.replace("{src}", "/src").replace("{out}", "/out") for a in args]
     return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
                           timeout=timeout)
 

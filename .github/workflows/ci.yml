@@ -43,9 +43,15 @@ jobs:
           r = json.load(open(glob.glob("e2e/*/report.json")[0]))
           tools = {t["name"]: t["status"] for t in r["tools"]}
           assert tools.get("sandbox") == "ok", tools
-          assert tools.get("vibesec-probe") == "ok", tools
-          assert any(f["confirmed"] for f in r["findings"]), "nenhum achado confirmado"
+          for name in ("vibesec-probe", "semgrep", "trivy", "nmap", "nuclei", "zap", "tshark"):
+              assert tools.get(name) == "ok", (name, tools)
+          ids = {f["rule_id"] for f in r["findings"] if f["confirmed"]}
           print(tools)
+          print(sorted(ids))
+          # falhas plantadas no app de teste que precisam ser exploradas de verdade
+          assert "exposed/console" in ids, "console do Werkzeug não detectado"
+          assert "xss-reflected-name" in ids, "XSS refletido não explorado"
+          assert "sqli-error-id" in ids, "SQL injection não explorado"
           EOF
       - uses: actions/upload-artifact@v4
         if: always()

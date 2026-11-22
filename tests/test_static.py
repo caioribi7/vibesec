@@ -28,7 +28,9 @@ def test_builtin_sast_finds_the_planted_bugs(ctx):
     }
     assert expected <= ids, f"faltando: {expected - ids}"
     sqli = next(f for f in found if f.rule_id == "sqli-fstring")
-    assert sqli.file == "app.py" and sqli.line == 17 and sqli.severity == Severity.HIGH
+    src = (ctx.root / "app.py").read_text(encoding="utf-8").splitlines()
+    expected_line = next(i for i, line in enumerate(src, 1) if "SELECT name FROM users WHERE id" in line)
+    assert sqli.file == "app.py" and sqli.line == expected_line and sqli.severity == Severity.HIGH
 
 
 def test_sast_ignores_safe_code(tmp_path):

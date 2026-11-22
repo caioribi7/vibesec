@@ -104,6 +104,8 @@ def nuclei(sb: Sandbox, work: Path, depth: str) -> list[Finding]:
     r = run_container(TOOLS["nuclei"].image, args, [sb.net_pub, sb.net_int], timeout=3600,
                       extra=["-v", "vibesec-nuclei:/root"])
     (work / "nuclei.jsonl").write_text(r.stdout or "", encoding="utf-8")
+    if not (r.stdout or "").strip() and re.search(r"(?i)(\[FTL\]|could not|no templates|error)", r.stderr or ""):
+        raise RuntimeError((r.stderr or "").strip()[-400:])
     out = []
     for line in (r.stdout or "").splitlines():
         try:
