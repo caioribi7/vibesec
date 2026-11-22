@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e ".[dev]"
+      - run: ruff check src tests
+      - run: pytest -q
+
+  sandbox-e2e:
+    # roda o pentest completo (Docker + nmap/nuclei/ZAP) contra o app vulnerável de teste
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - run: vibesec scan tests/fixtures/vulnapp --mode full --depth quick --no-ai -y -q --out e2e
+      - name: Confere que a sandbox subiu e os ataques confirmaram falhas
+        run: |
+          python - <<'EOF'
+          import glob, json
+          r = json.load(open(glob.glob("e2e/*/report.json")[0]))
+          tools = {t["name"]: t["status"] for t in r["tools"]}
+          assert tools.get("sandbox") == "ok", tools
+          assert tools.get("vibesec-probe") == "ok", tools
+          assert any(f["confirmed"] for f in r["findings"]), "nenhum achado confirmado"
+          print(tools)
+          EOF
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-report
+          path: e2e
